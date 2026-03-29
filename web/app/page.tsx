@@ -311,7 +311,7 @@ export default function Home() {
                 {/* Jira Card */}
                 <div className="card">
                   <div className="card-title">
-                    🔗 Jira Tracking
+                    🔗 Atlassian (Jira / Confluence)
                     {connStatus.jira === "ok" && (
                       <span className="status-badge success">✓ Connected</span>
                     )}
@@ -319,7 +319,7 @@ export default function Home() {
                       <span className="status-badge error">✗ Failed</span>
                     )}
                   </div>
-                  <p className="card-subtitle">Connect your Atlassian Jira workspace</p>
+                  <p className="card-subtitle">Connect your Atlassian workspace</p>
 
                   <div className="form-group">
                     <label className="form-label">Jira Base URL</label>
@@ -502,20 +502,20 @@ export default function Home() {
           {currentStep === 2 && (
             <div className="fade-in">
               <div className="card">
-                <div className="card-title">🎯 Feature Context</div>
+                <div className="card-title">🎯 Jira / Confluence Context</div>
                 <p className="card-subtitle">
-                  Provide the Jira Ticket ID and any additional context to ground the AI generation.
+                  Provide a Jira ID, Jira URL, or Confluence Page URL to ground the AI generation.
                 </p>
 
                 <div className="form-group">
-                  <label className="form-label">Jira Story / Epic ID</label>
+                  <label className="form-label">Jira ID or Confluence URL</label>
                   <input
                     id="story-id"
                     type="text"
                     className="form-input"
-                    placeholder="e.g. KAN-4, PROJ-123"
+                    placeholder="e.g. KAN-4, or https://.../wiki/pages/123"
                     value={storyId}
-                    onChange={(e) => setStoryId(e.target.value.toUpperCase())}
+                    onChange={(e) => setStoryId(e.target.value)}
                   />
                 </div>
 
@@ -609,8 +609,8 @@ export default function Home() {
                   <div className="spinner" />
                   <div className="loading-title">Generating Test Plan…</div>
                   <div className="loading-sub">
-                    Fetching <strong>{storyId}</strong> from Jira, then crafting each section using {llm.provider.toUpperCase()}.<br />
-                    This may take 15–60 seconds depending on the story length.
+                    Fetching <strong>{storyId}</strong> from Atlassian, then crafting each section using {llm.provider.toUpperCase()}.<br />
+                    This may take 15–60 seconds depending on the length.
                   </div>
                 </div>
               ) : genError ? (

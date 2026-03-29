@@ -82,14 +82,61 @@ export async function testJiraConnection(conn: JiraConnection): Promise<{
 }
 
 /**
- * Fetch a Jira issue by ID and return structured StoryData.
+ * Fetch a Jira issue or Confluence Page by ID/URL and return structured StoryData.
  */
 export async function fetchJiraStory(
   conn: JiraConnection,
-  storyId: string,
+  storyIdOrUrl: string,
   additionalContext?: string
 ): Promise<StoryData> {
   const base = conn.baseUrl.replace(/\/$/, "");
+
+  // -- Confluence Detection --
+  if (storyIdOrUrl.includes("/wiki/") || storyIdOrUrl.match(/(?:pages|page)\/(\d+)/i)) {
+    let pageId = storyIdOrUrl;
+    const match = storyIdOrUrl.match(/(?:pages|page)\/(\d+)/i);
+    if (match && match[1]) {
+      pageId = match[1];
+    }
+    
+    // Confluence v1 API works better for older and newer instances universally:
+    const url = `${base}/wiki/rest/api/content/${pageId}?expand=body.storage`;
+    
+    const res = await fetch(url, {
+      headers: {
+        Authorization: buildAuthHeader(conn.email, conn.apiToken),
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (res.status === 401) throw new Error("Confluence authentication failed. Check credentials.");
+    if (res.status === 404) throw new Error(`Confluence page '${pageId}' not found.`);
+    if (!res.ok) throw new Error(`Confluence API error: HTTP ${res.status}`);
+
+    const data = await res.json();
+    const bodyHtml = data.body?.storage?.value ?? "";
+    // Strip HTML tags for plain text description
+    const description = bodyHtml.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
+
+    return {
+      id: data.id ?? pageId,
+      title: data.title ?? "Confluence Page",
+      description: description,
+      acceptanceCriteria: "",
+      issueType: "Confluence Page",
+      status: data.status ?? "Published",
+      additionalContext: additionalContext ?? "",
+    };
+  }
+
+  // -- Jira Detection --
+  let storyId = storyIdOrUrl;
+  const matchJira = storyIdOrUrl.match(/browse\/([A-Z0-9\-]+)/i);
+  if (matchJira && matchJira[1]) {
+    storyId = matchJira[1];
+  }
+
   const url = `${base}/rest/api/3/issue/${encodeURIComponent(storyId)}`;
 
   const res = await fetch(url, {
