@@ -56,7 +56,7 @@ export default function Home() {
   const [llm, setLlm] = useState<LLMConnection>({
     provider: "groq",
     apiKey: "",
-    model: "llama3-8b-8192",
+    model: "llama-3.3-70b-versatile",
     baseUrl: "",
   });
   const [connStatus, setConnStatus] = useState<ConnectionStatus>({
@@ -206,7 +206,7 @@ export default function Home() {
 
   function handleProviderChange(provider: LLMProvider) {
     const defaults: Record<LLMProvider, string> = {
-      groq: "llama3-8b-8192",
+      groq: "llama-3.3-70b-versatile",
       ollama: "llama3",
       grok: "grok-beta",
     };
@@ -435,7 +435,7 @@ export default function Home() {
                       className="form-input"
                       placeholder={
                         llm.provider === "groq"
-                          ? "llama3-8b-8192"
+                          ? "llama-3.3-70b-versatile"
                           : llm.provider === "grok"
                           ? "grok-beta"
                           : "llama3"
