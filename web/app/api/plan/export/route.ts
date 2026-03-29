@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     if (body.format === "docx") {
       const buffer = await exportToDocx(body.plan);
-      return new NextResponse(buffer, {
+      return new NextResponse(buffer as any, {
         status: 200,
         headers: {
           "Content-Type":
