@@ -1,7 +1,7 @@
 // types/index.ts
 // Shared TypeScript types for the Test Plan Generator
 
-export type LLMProvider = "groq" | "ollama" | "grok";
+export type LLMProvider = "groq" | "ollama" | "grok" | "gemini" | "openrouter" | "github" | "cohere" | "lmstudio";
 export type PlatformType = "jira" | "ado";
 
 // ─── Connection Configs ─────────────────────────────────────────────────────

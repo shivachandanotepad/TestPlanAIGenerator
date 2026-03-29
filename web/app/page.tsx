@@ -209,6 +209,11 @@ export default function Home() {
       groq: "llama-3.3-70b-versatile",
       ollama: "llama3",
       grok: "grok-beta",
+      gemini: "gemini-1.5-flash",
+      openrouter: "mistralai/mistral-nemo",
+      github: "gpt-4o-mini",
+      cohere: "command-r-plus",
+      lmstudio: "llama-3.1-8b-instruct",
     };
     setLlm((l) => ({ ...l, provider, model: defaults[provider], apiKey: "", baseUrl: "" }));
     setConnStatus((s) => ({ ...s, llm: "idle", llmMessage: undefined }));
@@ -394,13 +399,24 @@ export default function Home() {
                       <option value="groq">Groq (Cloud API)</option>
                       <option value="grok">Grok (xAI)</option>
                       <option value="ollama">Ollama (Local)</option>
+                      <option value="gemini">Google Gemini</option>
+                      <option value="openrouter">OpenRouter (Free)</option>
+                      <option value="github">GitHub Models</option>
+                      <option value="cohere">Cohere API</option>
+                      <option value="lmstudio">LM Studio (Local)</option>
                     </select>
                   </div>
 
-                  {(llm.provider === "groq" || llm.provider === "grok") && (
+                  {["groq", "grok", "gemini", "openrouter", "github", "cohere"].includes(llm.provider) && (
                     <div className="form-group">
                       <label className="form-label">
-                        {llm.provider === "groq" ? "Groq API Key" : "xAI API Key"}
+                        {llm.provider === "groq" ? "Groq API Key"
+                          : llm.provider === "grok" ? "xAI API Key"
+                          : llm.provider === "gemini" ? "Gemini API Key"
+                          : llm.provider === "openrouter" ? "OpenRouter API Key"
+                          : llm.provider === "github" ? "GitHub PA Token"
+                          : llm.provider === "cohere" ? "Cohere API Key"
+                          : "API Key"}
                       </label>
                       <input
                         id="llm-key"
@@ -413,14 +429,16 @@ export default function Home() {
                     </div>
                   )}
 
-                  {llm.provider === "ollama" && (
+                  {["ollama", "lmstudio"].includes(llm.provider) && (
                     <div className="form-group">
-                      <label className="form-label">Ollama Base URL</label>
+                      <label className="form-label">
+                        {llm.provider === "ollama" ? "Ollama Base URL" : "LM Studio Base URL"}
+                      </label>
                       <input
-                        id="ollama-url"
+                        id="llm-url"
                         type="url"
                         className="form-input"
-                        placeholder="http://localhost:11434"
+                        placeholder={llm.provider === "ollama" ? "http://localhost:11434" : "http://localhost:1234/v1"}
                         value={llm.baseUrl ?? ""}
                         onChange={(e) => setLlm((l) => ({ ...l, baseUrl: e.target.value }))}
                       />
@@ -434,11 +452,13 @@ export default function Home() {
                       type="text"
                       className="form-input"
                       placeholder={
-                        llm.provider === "groq"
-                          ? "llama-3.3-70b-versatile"
-                          : llm.provider === "grok"
-                          ? "grok-beta"
-                          : "llama3"
+                        llm.provider === "groq" ? "llama-3.3-70b-versatile" :
+                        llm.provider === "grok" ? "grok-beta" :
+                        llm.provider === "gemini" ? "gemini-1.5-flash" :
+                        llm.provider === "openrouter" ? "mistralai/mistral-nemo" :
+                        llm.provider === "github" ? "gpt-4o-mini" :
+                        llm.provider === "cohere" ? "command-r-plus" :
+                        llm.provider === "lmstudio" ? "llama-3.1-8b-instruct" : "llama3"
                       }
                       value={llm.model}
                       onChange={(e) => setLlm((l) => ({ ...l, model: e.target.value }))}
@@ -457,7 +477,7 @@ export default function Home() {
                     disabled={
                       connStatus.llm === "loading" ||
                       !llm.model ||
-                      (llm.provider !== "ollama" && !llm.apiKey)
+                      (["groq", "grok", "gemini", "openrouter", "github", "cohere"].includes(llm.provider) && !llm.apiKey)
                     }
                   >
                     {connStatus.llm === "loading" ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Testing…</> : "Test Connection"}

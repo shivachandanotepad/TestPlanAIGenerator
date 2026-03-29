@@ -1,5 +1,5 @@
 // lib/llm.ts
-// Unified LLM connector — supports Groq, Ollama, and Grok (xAI)
+// Unified LLM connector — supports Groq, Ollama, Grok, Gemini, OpenRouter, GitHub, Cohere, LM Studio
 
 import type { LLMConnection } from "@/types";
 
@@ -48,9 +48,7 @@ async function testOllama(conn: LLMConnection): Promise<LLMTestResult> {
       return { status: "error", message: `Ollama server responded with HTTP ${res.status}.` };
     }
     const data = await res.json();
-    const models: string[] = (data.models ?? []).map(
-      (m: { name: string }) => m.name
-    );
+    const models: string[] = (data.models ?? []).map((m: { name: string }) => m.name);
     const modelBase = conn.model.split(":")[0];
     const found = models.some((m) => m === conn.model || m.split(":")[0] === modelBase);
     if (!found) {
@@ -69,32 +67,55 @@ async function testOllama(conn: LLMConnection): Promise<LLMTestResult> {
   }
 }
 
-async function testGrok(conn: LLMConnection): Promise<LLMTestResult> {
+async function testOpenAICompatible(conn: LLMConnection, baseURL: string): Promise<LLMTestResult> {
   try {
     const { OpenAI } = await import("openai");
-    const client = new OpenAI({
-      apiKey: conn.apiKey,
-      baseURL: "https://api.x.ai/v1",
-    });
+    const client = new OpenAI({ apiKey: conn.apiKey || "dummy", baseURL });
     const res = await client.chat.completions.create({
       model: conn.model,
       messages: [{ role: "user", content: "ping" }],
       max_tokens: 1,
     });
-    return { status: "ok", message: null, provider: "grok", model: res.model };
+    return { status: "ok", message: null, provider: conn.provider, model: res.model };
   } catch (err: unknown) {
-    const msg = String(err);
-    if (msg.includes("401") || msg.includes("authentication")) {
-      return { status: "error", message: "Invalid xAI API key." };
+    return { status: "error", message: `${conn.provider} error: ${String(err)}` };
+  }
+}
+
+async function testGemini(conn: LLMConnection): Promise<LLMTestResult> {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${conn.model}?key=${conn.apiKey}`);
+    if (!res.ok) {
+      if (res.status === 400) return { status: "error", message: `Gemini: Model ${conn.model} not found or invalid.` };
+      if (res.status === 403) return { status: "error", message: `Gemini: Invalid API key.` };
+      return { status: "error", message: `Gemini error: ${res.status}` };
     }
-    return { status: "error", message: `Grok error: ${msg}` };
+    return { status: "ok", message: null, provider: "gemini", model: conn.model };
+  } catch (err) {
+    return { status: "error", message: `Gemini API error: ${String(err)}` };
+  }
+}
+
+async function testCohere(conn: LLMConnection): Promise<LLMTestResult> {
+  try {
+    const res = await fetch("https://api.cohere.ai/v1/chat", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${conn.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: conn.model, message: "ping" })
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      return { status: "error", message: `Cohere error: ${errorData.message || res.status}` };
+    }
+    return { status: "ok", message: null, provider: "cohere", model: conn.model };
+  } catch (err) {
+    return { status: "error", message: `Cohere API error: ${String(err)}` };
   }
 }
 
 export async function testLLMConnection(conn: LLMConnection): Promise<LLMTestResult> {
-  if (!conn.provider) {
-    return { status: "error", message: "No LLM provider configured." };
-  }
+  if (!conn.provider) return { status: "error", message: "No LLM provider configured." };
+  
   switch (conn.provider) {
     case "groq":
       if (!conn.apiKey) return { status: "error", message: "Groq requires an API key." };
@@ -103,7 +124,21 @@ export async function testLLMConnection(conn: LLMConnection): Promise<LLMTestRes
       return testOllama(conn);
     case "grok":
       if (!conn.apiKey) return { status: "error", message: "Grok requires an API key." };
-      return testGrok(conn);
+      return testOpenAICompatible(conn, "https://api.x.ai/v1");
+    case "openrouter":
+      if (!conn.apiKey) return { status: "error", message: "OpenRouter requires an API key." };
+      return testOpenAICompatible(conn, "https://openrouter.ai/api/v1");
+    case "github":
+      if (!conn.apiKey) return { status: "error", message: "GitHub requires a Personal Access Token." };
+      return testOpenAICompatible(conn, "https://models.inference.ai.azure.com");
+    case "lmstudio":
+      return testOpenAICompatible(conn, conn.baseUrl ?? "http://localhost:1234/v1");
+    case "gemini":
+      if (!conn.apiKey) return { status: "error", message: "Gemini requires an API key." };
+      return testGemini(conn);
+    case "cohere":
+      if (!conn.apiKey) return { status: "error", message: "Cohere requires an API key." };
+      return testCohere(conn);
     default:
       return { status: "error", message: `Unknown provider: ${conn.provider}` };
   }
@@ -117,11 +152,7 @@ async function generateWithGroq(conn: LLMConnection, prompt: string): Promise<st
   const res = await client.chat.completions.create({
     model: conn.model,
     messages: [
-      {
-        role: "system",
-        content:
-          "You are a senior QA engineer. Generate test plan content strictly following the provided section headings. Be concise, structured, and professional.",
-      },
+      { role: "system", content: "You are a senior QA engineer. Generate test plan content strictly following the provided section headings. Be concise, structured, and professional." },
       { role: "user", content: prompt },
     ],
     max_tokens: 4096,
@@ -137,33 +168,25 @@ async function generateWithOllama(conn: LLMConnection, prompt: string): Promise<
     body: JSON.stringify({
       model: conn.model,
       messages: [
-        {
-          role: "system",
-          content:
-            "You are a senior QA engineer. Generate test plan content strictly following the provided section headings. Be concise, structured, and professional.",
-        },
+        { role: "system", content: "You are a senior QA engineer. Generate test plan content strictly following the provided section headings. Be concise, structured, and professional." },
         { role: "user", content: prompt },
       ],
       stream: false,
     }),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(120_000),
   });
   if (!res.ok) throw new Error(`Ollama generation error: HTTP ${res.status}`);
   const data = await res.json();
   return data.message?.content ?? "";
 }
 
-async function generateWithGrok(conn: LLMConnection, prompt: string): Promise<string> {
+async function generateOpenAICompatible(conn: LLMConnection, prompt: string, baseURL: string): Promise<string> {
   const { OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey: conn.apiKey, baseURL: "https://api.x.ai/v1" });
+  const client = new OpenAI({ apiKey: conn.apiKey || "dummy", baseURL });
   const res = await client.chat.completions.create({
     model: conn.model,
     messages: [
-      {
-        role: "system",
-        content:
-          "You are a senior QA engineer. Generate test plan content strictly following the provided section headings. Be concise, structured, and professional.",
-      },
+      { role: "system", content: "You are a senior QA engineer. Generate test plan content strictly following the provided section headings. Be concise, structured, and professional." },
       { role: "user", content: prompt },
     ],
     max_tokens: 4096,
@@ -171,10 +194,36 @@ async function generateWithGrok(conn: LLMConnection, prompt: string): Promise<st
   return res.choices[0]?.message?.content ?? "";
 }
 
-export async function generateWithLLM(
-  conn: LLMConnection,
-  prompt: string
-): Promise<LLMGenerateResult> {
+async function generateGemini(conn: LLMConnection, prompt: string): Promise<string> {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${conn.model}:generateContent?key=${conn.apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: "System: You are a senior QA engineer. Generate test plan content strictly following the provided section headings. Be concise, structured, and professional.\n\nUser: " + prompt }] }],
+      generationConfig: { maxOutputTokens: 8192 }
+    })
+  });
+  if (!res.ok) throw new Error(`Gemini API error: ${res.status}`);
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+}
+
+async function generateCohere(conn: LLMConnection, prompt: string): Promise<string> {
+  const res = await fetch("https://api.cohere.ai/v1/chat", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${conn.apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      model: conn.model, 
+      preamble: "You are a senior QA engineer. Generate test plan content strictly following the provided section headings. Be concise, structured, and professional.",
+      message: prompt
+    })
+  });
+  if (!res.ok) throw new Error(`Cohere API error: ${res.status}`);
+  const data = await res.json();
+  return data.text ?? "";
+}
+
+export async function generateWithLLM(conn: LLMConnection, prompt: string): Promise<LLMGenerateResult> {
   if (!conn.provider) throw new Error("No LLM provider configured.");
 
   let content = "";
@@ -186,7 +235,22 @@ export async function generateWithLLM(
       content = await generateWithOllama(conn, prompt);
       break;
     case "grok":
-      content = await generateWithGrok(conn, prompt);
+      content = await generateOpenAICompatible(conn, prompt, "https://api.x.ai/v1");
+      break;
+    case "openrouter":
+      content = await generateOpenAICompatible(conn, prompt, "https://openrouter.ai/api/v1");
+      break;
+    case "github":
+      content = await generateOpenAICompatible(conn, prompt, "https://models.inference.ai.azure.com");
+      break;
+    case "lmstudio":
+      content = await generateOpenAICompatible(conn, prompt, conn.baseUrl ?? "http://localhost:1234/v1");
+      break;
+    case "gemini":
+      content = await generateGemini(conn, prompt);
+      break;
+    case "cohere":
+      content = await generateCohere(conn, prompt);
       break;
     default:
       throw new Error(`Unknown LLM provider: ${conn.provider}`);
